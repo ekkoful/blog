@@ -140,4 +140,55 @@ network namespace 通过系统调用来实现，在使用 Linux 中 clone() 系�
 PING 10.1.1.1 (10.1.1.1) 56(84) bytes of data.
 64 bytes from 10.1.1.1: icmp_seq=1 ttl=64 time=0.101 ms
 64 bytes from 10.1.1.1: icmp_seq=2 ttl=64 time=0.027 ms
-````
+
+```
+### 1.1.3 network namespace API 的使用
+
+- 通过 `clone()` 系统调用创建 namespace，可以通过 `man clone` 查看具体详细信息
+    - `clone()` 是系统调用 `fork()` 的延伸，可以通过 `flags` 参数控制特定的功能
+- 通过 `/proc/PID/ns` 维持 namespace 的存在，每个 Linux 进程都拥有一个属于自己的 `/proc/PID/ns`，这个目录下的每个文件都代表一个类型的 namespace
+    - Linux 内核 3.8 版本以前，`/proc/PID/ns` 下面都是硬链接，并且只有 ipc，net，uts这3个文件
+    - Linux 内核 3.8 版本以后，`/proc/PID/ns` 下面都是符号链接，这些符号链接的用途是确定某两个进程是否属于同一个 namespace，如果两个进程在同一个 namespace 中，那么这两个进程 `/proc/PID/ns` 目录对应符号链接文件的数字是一样的，也可以通过 `stat()` 系统调用结构体的 `st_ino` 字段，这是一样的
+    - `/proc/PID/ns` 目录下的文件还有一个作用——当我们打开这些文件时，只要文件描述符保持open状态，对应的namespace就会一直存在，哪怕这个namespace里的所有进程都终止运行了。之前版本的Linux内核，要想保持namespace存在，需要在namespace里放一个进程（当然，不一定是运行中的），这种做法在一些场景下有些笨重（虽然Kubernetes就是这么做的）。因此，Linux内核提供的黑科技允许：只要打开文件描述符，不需要进程存在也能保持namespace存在
+- 通过 `setns()` 系统调用向 namespace 里面添加进程
+    - `setns()` 系统调用的主要功能就是把一个进程加入到一个已经存在的 namespace 中
+    - Linux 内核 3.8 版本之前，`setns()`，还不用加入 mount，pid，user 这几个 namespace，3.8 版本以后，支持所有类型的 namespace。
+- 通过 `unshare()` 系统调用，帮助进程离开 namespace，`man 2 unshare` 查看更多信息，同样存在 `unshare` 命令
+    -  `unshare()` 系统的工作机制是，先通过指定的 `flags` 参数，创建相应的 namespace，然后再把这个进程移动到这些新创建的 namespace 中，这样也就离开了原来的 namespace。
+    - 大部分Linux发行版自带的 `unshare` 命令就是基于 `unshare()` 系统调用的，它的作用就是在当前 shell 所在的 namespace 外执行一条命令，Linux 会为需要执行的命令启动一个新进程，然后在另外一个 namespace 中执行操作，这样就可以起到执行结果和原（父）进程隔离的效果。
+```bash
+## PID 22
+[root@localhost ns]# pwd
+/proc/22/ns
+[root@localhost ns]# ll
+total 0
+lrwxrwxrwx. 1 root root 0 Mar 15 13:36 ipc -> ipc:[4026531839]
+lrwxrwxrwx. 1 root root 0 Mar 15 13:36 mnt -> mnt:[4026531840]
+lrwxrwxrwx. 1 root root 0 Mar 15 13:36 net -> net:[4026531956]
+lrwxrwxrwx. 1 root root 0 Mar 15 13:36 pid -> pid:[4026531836]
+lrwxrwxrwx. 1 root root 0 Mar 15 13:36 user -> user:[4026531837]
+lrwxrwxrwx. 1 root root 0 Mar 15 13:36 uts -> uts:[4026531838]
+
+# PID 23
+[root@localhost ns]# pwd
+/proc/23/ns
+[root@localhost ns]# ll
+total 0
+lrwxrwxrwx. 1 root root 0 Mar 15 13:44 ipc -> ipc:[4026531839]
+lrwxrwxrwx. 1 root root 0 Mar 15 13:44 mnt -> mnt:[4026531840]
+lrwxrwxrwx. 1 root root 0 Mar 15 13:44 net -> net:[4026531956]
+lrwxrwxrwx. 1 root root 0 Mar 15 13:44 pid -> pid:[4026531836]
+lrwxrwxrwx. 1 root root 0 Mar 15 13:44 user -> user:[4026531837]
+lrwxrwxrwx. 1 root root 0 Mar 15 13:44 uts -> uts:[4026531838]
+
+# 新建一个文件
+touch /my/net
+mount --bind /proc/$$/ns/net /my/net
+# /proc/PID/ns目录下的文件挂载起来就能起到打开文件描述符的作用，而且这个network namespace会一直存在，直到/proc/self/ns/net被卸载
+```
+
+### 1.1.4 network namespace 总结
+Linux 的 network namespace 可以自定义一个独立的网络栈，简单到只有 loopback 设备，复杂到具备系统完整的网络能力，这就使得 network namespace 成为 Linux 网络虚拟化的基石，不论是在虚拟机时代，还是容器时代。  
+Linux network namespace 的里一个隔离功能在于，系统管理员一旦禁用 namespace 中的网络设备，即使这个 namespace 里面的进程拿到了一些系统特权，也无法和外界进行通信。  
+网络对安全比较敏感，即使 network namespace，能够提供网络资源隔离的机制，用户还是需要结合其他 namespace 一起使用，以提供更好的安全隔离能力。
+
