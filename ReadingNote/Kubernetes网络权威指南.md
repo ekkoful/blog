@@ -4,11 +4,11 @@
 
 觉得还是需要多研究研究 Kubernetes 网络相关的知识，所以看了这本书，并记录相关笔记。以便后续学习，总结。
 
-## 第一章--Linux网络虚拟化
+# 第一章--Linux网络虚拟化
 
 这一章作为本书的第一章，也是吸引我的原因，因为 Kubernetes 网络，本质上就是 Linux 虚拟网络，所以在第一章，熟悉和学习 Linux 虚拟网络相关的知识，便于后续的章节的阅读和学习。
 
-### 1.1 网络虚拟化的基石：Network namespace
+## 1.1 网络虚拟化的基石：Network namespace
 
 Linux 的 namespace 组要作用是隔离内核资源，对于进程来说，如果想要使用 namespace 里面的资源，首先要进入到这个 namespace 之中，而且无法跨 namespace 访问资源，Linux 的 namespace 给里面的进程造成了两个错觉，1：它是系统中的唯一进程，2：它独享系统的所有资源。  
 
@@ -30,7 +30,7 @@ UTS       CLONE_NEWUTS    uts_namespaces(7)     Hostname and NIS
                                                 domain name
 ```
 
-#### 1.1.1 初识 network namespace
+### 1.1.1 初识 network namespace
 
 network namespace 通过系统调用来实现，在使用 Linux 中 clone() 系统调用的时候，传入 CLONE_NEWNET 参数创建一个network namespace。与其他 namespace 需要通过代码调用系统调用 API不同，network namespace的增删改查功能已经集成到了 Linux 的 `ip` 命令的子命令 `netns` 命令中。
 下面是简单的命令使用
@@ -50,7 +50,7 @@ network namespace 通过系统调用来实现，在使用 Linux 中 clone() 系�
 
 - `ip netns delete netns1` 同样也没有删除 netns1 这个 network namespace，它知识移除了这个 network namespace 对应的挂载点。只要里面还有进程在运行着，network namespace 便会一直存在。
 
-#### 1.1.2 配置 network namespace
+### 1.1.2 配置 network namespace
 
 一个全新的 namespace 会附带创建一个本地回环地址，除此之外，这个新的 network namespace 没有任何其他的网络设备，而且这个 network namespace 自带的 lo 设备状态还是 DOWN 未开启的。
 但是如果想要和外界进行通信，就需要在 network namespace 再创建一堆虚拟的网卡，即所谓的 veth pair。veth pair 总是成对出现的且相互连接的，就像 Linux 系统的双向管道，报文从 veth pair 一端进去就会从另外一端收到。
@@ -157,7 +157,7 @@ PING 10.1.1.1 (10.1.1.1) 56(84) bytes of data.
 
 ```
 
-#### 1.1.3 network namespace API 的使用
+### 1.1.3 network namespace API 的使用
 
 - 通过 `clone()` 系统调用创建 namespace，可以通过 `man clone` 查看具体详细信息
   - `clone()` 是系统调用 `fork()` 的延伸，可以通过 `flags` 参数控制特定的功能
@@ -203,7 +203,7 @@ mount --bind /proc/$$/ns/net /my/net
 # /proc/PID/ns目录下的文件挂载起来就能起到打开文件描述符的作用，而且这个network namespace会一直存在，直到/proc/self/ns/net被卸载
 ```
 
-#### 1.1.4 network namespace 总结
+### 1.1.4 network namespace 总结
 
 Linux 的 network namespace 可以自定义一个独立的网络栈，简单到只有 loopback 设备，复杂到具备系统完整的网络能力，这就使得 network namespace 成为 Linux 网络虚拟化的基石，不论是在虚拟机时代，还是容器时代。  
 Linux network namespace 的里一个隔离功能在于，系统管理员一旦禁用 namespace 中的网络设备，即使这个 namespace 里面的进程拿到了一些系统特权，也无法和外界进行通信。  
