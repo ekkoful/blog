@@ -1,13 +1,19 @@
 # 前言
+
 《Kubernetes 网络权威指南》--杜军著
 
 觉得还是需要多研究研究 Kubernetes 网络相关的知识，所以看了这本书，并记录相关笔记。以便后续学习，总结。
 
 # 第一章--Linux网络虚拟化
+
 这一章作为本书的第一章，也是吸引我的原因，因为 Kubernetes 网络，本质上就是 Linux 虚拟网络，所以在第一章，熟悉和学习 Linux 虚拟网络相关的知识，便于后续的章节的阅读和学习。
+
 ## 1.1 网络虚拟化的基石：Network namespace
+
 Linux 的 namespace 组要作用是隔离内核资源，对于进程来说，如果想要使用 namespace 里面的资源，首先要进入到这个 namespace 之中，而且无法跨 namespace 访问资源，Linux 的 namespace 给里面的进程造成了两个错觉，1：它是系统中的唯一进程，2：它独享系统的所有资源。  
+
 - 回顾知识点1: Linux 操作系统中7个 namespace，可以使用 `man namespaces` 查看相关含义，Linux中这7个 namesapce 本质是 docker 实现的主要原理，同样的 Kubernetes 中的 Pod 通过对这些 namespace 进行不同的程度的共享和完全隔离，来实现 Pod 中容器能够共享网络等主要功能。
+
 ```bash
 # man namespaces
 Namespace Types:
@@ -23,9 +29,12 @@ User      CLONE_NEWUSER   user_namespaces(7)    User and group IDs
 UTS       CLONE_NEWUTS    uts_namespaces(7)     Hostname and NIS
                                                 domain name
 ```
+
 ### 1.1.1 初识 network namespace
+
 network namespace 通过系统调用来实现，在使用 Linux 中 clone() 系统调用的时候，传入 CLONE_NEWNET 参数创建一个network namespace。与其他 namespace 需要通过代码调用系统调用 API不同，network namespace的增删改查功能已经集成到了 Linux 的 `ip` 命令的子命令 `netns` 命令中。
 下面是简单的命令使用
+
 ```bash
 # 创建一个名为 netns1 的 network namespace
 # ip netns add netns1
@@ -36,12 +45,17 @@ network namespace 通过系统调用来实现，在使用 Linux 中 clone() 系�
 # 删除 network namespace
 # ip netns delete netns1
 ```
+
 - 当 ip 命令创建了一个 network namespace 时，系统会在 `/var/run/netns` 路径下面生成一个挂载点。挂载点的作用一方面时方便对 namespace 进行管理，另一方面是使 namespace 即使没有进程运行也能继续存在。
+
 - `ip netns delete netns1` 同样也没有删除 netns1 这个 network namespace，它知识移除了这个 network namespace 对应的挂载点。只要里面还有进程在运行着，network namespace 便会一直存在。
+
 ### 1.1.2 配置 network namespace
+
 一个全新的 namespace 会附带创建一个本地回环地址，除此之外，这个新的 network namespace 没有任何其他的网络设备，而且这个 network namespace 自带的 lo 设备状态还是 DOWN 未开启的。
 但是如果想要和外界进行通信，就需要在 network namespace 再创建一堆虚拟的网卡，即所谓的 veth pair。veth pair 总是成对出现的且相互连接的，就像 Linux 系统的双向管道，报文从 veth pair 一端进去就会从另外一端收到。
 可以使用以下命令进行 network namespace 的一些配置
+
 ```bash
 # 创建 veth0 和 veth1 一对网卡
 [root@localhost ~]# ip link add veth0 type veth peer name veth1
@@ -142,20 +156,22 @@ PING 10.1.1.1 (10.1.1.1) 56(84) bytes of data.
 64 bytes from 10.1.1.1: icmp_seq=2 ttl=64 time=0.027 ms
 
 ```
+
 ### 1.1.3 network namespace API 的使用
 
 - 通过 `clone()` 系统调用创建 namespace，可以通过 `man clone` 查看具体详细信息
-    - `clone()` 是系统调用 `fork()` 的延伸，可以通过 `flags` 参数控制特定的功能
+  - `clone()` 是系统调用 `fork()` 的延伸，可以通过 `flags` 参数控制特定的功能
 - 通过 `/proc/PID/ns` 维持 namespace 的存在，每个 Linux 进程都拥有一个属于自己的 `/proc/PID/ns`，这个目录下的每个文件都代表一个类型的 namespace
-    - Linux 内核 3.8 版本以前，`/proc/PID/ns` 下面都是硬链接，并且只有 ipc，net，uts这3个文件
-    - Linux 内核 3.8 版本以后，`/proc/PID/ns` 下面都是符号链接，这些符号链接的用途是确定某两个进程是否属于同一个 namespace，如果两个进程在同一个 namespace 中，那么这两个进程 `/proc/PID/ns` 目录对应符号链接文件的数字是一样的，也可以通过 `stat()` 系统调用结构体的 `st_ino` 字段，这是一样的
-    - `/proc/PID/ns` 目录下的文件还有一个作用——当我们打开这些文件时，只要文件描述符保持open状态，对应的namespace就会一直存在，哪怕这个namespace里的所有进程都终止运行了。之前版本的Linux内核，要想保持namespace存在，需要在namespace里放一个进程（当然，不一定是运行中的），这种做法在一些场景下有些笨重（虽然Kubernetes就是这么做的）。因此，Linux内核提供的黑科技允许：只要打开文件描述符，不需要进程存在也能保持namespace存在
+  - Linux 内核 3.8 版本以前，`/proc/PID/ns` 下面都是硬链接，并且只有 ipc，net，uts这3个文件
+  - Linux 内核 3.8 版本以后，`/proc/PID/ns` 下面都是符号链接，这些符号链接的用途是确定某两个进程是否属于同一个 namespace，如果两个进程在同一个 namespace 中，那么这两个进程 `/proc/PID/ns` 目录对应符号链接文件的数字是一样的，也可以通过 `stat()` 系统调用结构体的 `st_ino` 字段，这是一样的
+  - `/proc/PID/ns` 目录下的文件还有一个作用——当我们打开这些文件时，只要文件描述符保持open状态，对应的namespace就会一直存在，哪怕这个namespace里的所有进程都终止运行了。之前版本的Linux内核，要想保持namespace存在，需要在namespace里放一个进程（当然，不一定是运行中的），这种做法在一些场景下有些笨重（虽然Kubernetes就是这么做的）。因此，Linux内核提供的黑科技允许：只要打开文件描述符，不需要进程存在也能保持namespace存在
 - 通过 `setns()` 系统调用向 namespace 里面添加进程
-    - `setns()` 系统调用的主要功能就是把一个进程加入到一个已经存在的 namespace 中
-    - Linux 内核 3.8 版本之前，`setns()`，还不用加入 mount，pid，user 这几个 namespace，3.8 版本以后，支持所有类型的 namespace。
+  - `setns()` 系统调用的主要功能就是把一个进程加入到一个已经存在的 namespace 中
+  - Linux 内核 3.8 版本之前，`setns()`，还不用加入 mount，pid，user 这几个 namespace，3.8 版本以后，支持所有类型的 namespace。
 - 通过 `unshare()` 系统调用，帮助进程离开 namespace，`man 2 unshare` 查看更多信息，同样存在 `unshare` 命令
-    -  `unshare()` 系统的工作机制是，先通过指定的 `flags` 参数，创建相应的 namespace，然后再把这个进程移动到这些新创建的 namespace 中，这样也就离开了原来的 namespace。
-    - 大部分Linux发行版自带的 `unshare` 命令就是基于 `unshare()` 系统调用的，它的作用就是在当前 shell 所在的 namespace 外执行一条命令，Linux 会为需要执行的命令启动一个新进程，然后在另外一个 namespace 中执行操作，这样就可以起到执行结果和原（父）进程隔离的效果。
+  - `unshare()` 系统的工作机制是，先通过指定的 `flags` 参数，创建相应的 namespace，然后再把这个进程移动到这些新创建的 namespace 中，这样也就离开了原来的 namespace。
+  - 大部分Linux发行版自带的 `unshare` 命令就是基于 `unshare()` 系统调用的，它的作用就是在当前 shell 所在的 namespace 外执行一条命令，Linux 会为需要执行的命令启动一个新进程，然后在另外一个 namespace 中执行操作，这样就可以起到执行结果和原（父）进程隔离的效果。
+
 ```bash
 ## PID 22
 [root@localhost ns]# pwd
@@ -188,7 +204,7 @@ mount --bind /proc/$$/ns/net /my/net
 ```
 
 ### 1.1.4 network namespace 总结
+
 Linux 的 network namespace 可以自定义一个独立的网络栈，简单到只有 loopback 设备，复杂到具备系统完整的网络能力，这就使得 network namespace 成为 Linux 网络虚拟化的基石，不论是在虚拟机时代，还是容器时代。  
 Linux network namespace 的里一个隔离功能在于，系统管理员一旦禁用 namespace 中的网络设备，即使这个 namespace 里面的进程拿到了一些系统特权，也无法和外界进行通信。  
 网络对安全比较敏感，即使 network namespace，能够提供网络资源隔离的机制，用户还是需要结合其他 namespace 一起使用，以提供更好的安全隔离能力。
-
