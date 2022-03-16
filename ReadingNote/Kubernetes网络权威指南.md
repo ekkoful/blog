@@ -208,3 +208,9 @@ mount --bind /proc/$$/ns/net /my/net
 Linux 的 network namespace 可以自定义一个独立的网络栈，简单到只有 loopback 设备，复杂到具备系统完整的网络能力，这就使得 network namespace 成为 Linux 网络虚拟化的基石，不论是在虚拟机时代，还是容器时代。  
 Linux network namespace 的里一个隔离功能在于，系统管理员一旦禁用 namespace 中的网络设备，即使这个 namespace 里面的进程拿到了一些系统特权，也无法和外界进行通信。  
 网络对安全比较敏感，即使 network namespace，能够提供网络资源隔离的机制，用户还是需要结合其他 namespace 一起使用，以提供更好的安全隔离能力。
+
+
+## 1.2 veth pair
+veth 是虚拟以太网的缩写，veth 设备总是成对存在的，因此称为 veth pair。veth pair 一端发送的数据会在另外一端接收，非常像 Linux 的双向管道。根据这个特性，veth pair 常被用与跨 network namespace 之间的通信，即分别将 veth pair 的两端放在不同的 namespace 里。
+
+![picture 1](../images/pic_1647437195880.png)  
