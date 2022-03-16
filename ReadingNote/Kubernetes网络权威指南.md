@@ -211,6 +211,58 @@ Linux network namespace 的里一个隔离功能在于，系统管理员一旦�
 
 
 ## 1.2 veth pair
+
 veth 是虚拟以太网的缩写，veth 设备总是成对存在的，因此称为 veth pair。veth pair 一端发送的数据会在另外一端接收，非常像 Linux 的双向管道。根据这个特性，veth pair 常被用与跨 network namespace 之间的通信，即分别将 veth pair 的两端放在不同的 namespace 里。
 
 ![picture 1](../images/pic_1647437195880.png)  
+
+veth pair 设备的原理，也比较简单，就是向 veth pair 设备的一端输入数据，数据通过内核协议栈后从 veth pair 的另外一端出来。
+
+![picture 6](../images/pic_1647438372022.png)  
+
+### 1.2.2 容器与 host veth pair 的关系
+
+经典容器组网模型就是 veth pair + bridge 的模式。容器的 eth0 网卡实际上和外面 host 上的某个 veth 是成对的，可以通过下面的方法查看 host 的 vethxxx 和哪个 container eth0 是成对的关系
+
+1. 在目标容器里查看 `cat /class/net/eth0/iflink`，然后，在主机上遍历 `/sys/claas/net` 下面的全部目录，查看子目录 `ifindex` 的值和容器里查出来的`iflink` 值相当的 `veth` 名字，这样就找到了容器和主机的 veth pair 关系。
+2. 在目标容器执行 `ip link show eth0` 命令，查看 eth0 接口的 index 和它成对的接口的 index
+3. 通过 `ethtool -S VETH` 命令，列出 veth pair 对端的网卡 index。
+
+```bash
+root@kind-1-control-plane:/# ip link show eth0
+6: eth0@if7: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default 
+    link/ether 02:42:ac:12:00:02 brd ff:ff:ff:ff:ff:ff link-netnsid 0
+root@kind-1-control-plane:/# exit
+exit
+
+# 可以看到下面 index 为 7 的 veth 网卡
+?main ~/Workspace/Notes/blog> ip link show
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: enp3s0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc fq_codel state DOWN mode DEFAULT group default qlen 1000
+    link/ether e8:6a:64:51:be:aa brd ff:ff:ff:ff:ff:ff
+3: wlp5s0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DORMANT group default qlen 1000
+    link/ether 48:a4:72:34:e0:8b brd ff:ff:ff:ff:ff:ff
+4: br-3d736774a616: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default 
+    link/ether 02:42:61:79:6c:67 brd ff:ff:ff:ff:ff:ff
+5: docker0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state DOWN mode DEFAULT group default 
+    link/ether 02:42:82:8e:8b:88 brd ff:ff:ff:ff:ff:ff
+7: veth29f0509@if6: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-3d736774a616 state UP mode DEFAULT group default 
+    link/ether d2:5b:9b:b6:a2:cc brd ff:ff:ff:ff:ff:ff link-netnsid 0
+```
+
+## 1.3 Linux bridge
+
+两个 network namespace 可以通过 veth pair 进行连接，但是需要做到两个以上的 network namespace 相互连接，就需要 Linux bridge 来进行操作了。  
+网桥是二层网络设备，两个端口分别有一条独立的交换信道，不共享一条背板总线，可隔离冲突域。网桥比集线器（hub）性能更好，集线器上各端口都是共享同一条背板总线的。后来，网桥被具有更多端口、可隔离冲突域的交换机（switch）所取代。  
+Linux bridge 就是 Linux 系统中的网桥，但是 Linux bridge 的功能更像是一台虚拟的网络交换机，任意的真实物理设备和虚拟设备都可以连接到 Linux bridge 上。但是 Linux bridge 不能跨主机连接网络设备。  
+Linux bridge与Linux上其他网络设备的区别在于，普通的网络设备只有两端，从一端进来的数据会从另一端出去。例如，物理网卡从外面网络中收到的数据会转发给内核协议栈，而从协议栈过来的数据会转发到外面的物理网络中。Linux bridge则有多个端口，数据可以从任何端口进来，进来之后从哪个口出去取决于目的MAC地址，原理和物理交换机差不多。  
+
+![picture 7](../images/pic_1647441417935.png)  
+
+
+### 1.3.1 Linux bridge 简单操作
+
+- `ip` 命令可以管理网桥，`brctl` 命令也可以管理网桥
+
+bridge 在刚创建的时候，就是一个独立的网络设备，只有一个端口连着协议栈，其他端口什么都没有连接。所以 bridge 在和 veth pair 配合起来使用的时候，
