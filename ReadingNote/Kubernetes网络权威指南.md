@@ -313,3 +313,55 @@ tap设备与tun设备的工作原理完全相同，区别在于:
 tun/tap 设备简单理解，就是在用户层的程序，通过对数据包进行封装再通过物理网络转发到对应的地址。
 
 ## 1.5 iptables
+
+iptables 在 docker 和 kubernetes 中应用很多。
+- docker 容器和宿主机的端口映射
+- kubernetes service 的默认模式
+- Kubernetes CNI 的 protmap 插件
+- Kubernetes 网络策略
+
+### 1.5.1 netfilter
+
+iptables 的底层实现是 netfilter。netfilter 是在 Linux 内核 2.4 版本引入的一个子系统。它作为一个通用的、抽象的框架，提供一整套 hook 函数的管理机制，使得数据包过滤，包处理（设置标志位、修改TTL）、地址伪装、网络地址转换、透明代理、访问控制、基于协议类型的追踪、甚至带宽限速等功能。
+
+IP 层的5个钩子点的位置，对应 iptables 就是 5 条内置链。
+- prerouting
+- input
+- forward
+- output
+- postrouting
+
+![picture 11](../images/pic_1647616100356.png)  
+
+netfilter 是 Linux 内核网络模块的一个经典框架，整个 Linux 系统的网络安全都构建在 netfilter 之上。
+
+![picture 12](../images/pic_1647616205785.png)  
+
+构建在 netfilter 钩子之上的网络安全策略和连接跟踪的用户态程序就有 ebtables、arptables、（IPv6版本的）ip6tables、iptables、iptables-nftables（iptables 的改进版本）、conntrack（连接跟踪）等。Kubernetes网络之间用到的工具就有 ebtables、iptables/ip6tables 和 conntrack，其中 iptables 是核心。
+
+### 1.5.2 table、chain 和 rule
+5表5链
+- table
+  - filter：用于控制到达某条脸上的数据包是继续放行、丢弃或拒绝
+  - nat：用于修改数据包的源地址和目的地址
+  - mangle：用于修改数据包的 IP 头信息
+  - raw：iptables 是有状态的，即 iptables 对数据包有连接追踪（connection tracking）机制，而 raw 是用来去除这个机制的
+  - security：最不常用的表，通常，我们说iptables只有4张表，security表是新加入的特性），用于在数据包上应用SELinux
+
+- chain
+  - INPUT：用户处理输入本地进程的数据包
+  - OUTPUT：用于处理本地进程的输出数据包
+  - FORWARD：一般用于处理转发到其他机器/(network namespace)的数据包
+  - PREROUTING：DNAT
+  - POSTROUTING：SNAT
+
+- RULE
+  - DROP：丢弃
+  - REJECT：拒绝
+  - QUEUE：将数据包放入用户空间的队列，供用户空间的程序处理
+  - ACCEPT：同意
+  - JUMP：跳转到其他用户自定义的链继续执行
+  - RETURN：跳出当前链，该链里后续的规则不再执行
+
+![picture 13](../images/pic_1647617101711.png)  
+
