@@ -365,3 +365,14 @@ netfilter 是 Linux 内核网络模块的一个经典框架，整个 Linux 系�
 
 ![picture 13](../images/pic_1647617101711.png)  
 
+## 1.6 Linux 隧道： ipip
+
+tun设备也叫点对点设备，因为tun设备经常被用来做隧道通信（tunnel）。可以通过 `ip tunnel help` 查看 IP 隧道相关的操作，Linux 原生支持5种 L3层隧道：
+- ipip：即IPv4 in IPv4，在 IPv4 报文的基础上封装一个IPv4报文
+- GRE：通用路由封装，Generic Routing Encapsulation，定义了在任意一种网络层协议上封装其他任意一种网络层协议的机制，适用 IPv4 和 IPv6。
+- sit：ipip类似，sit用 IPv4 报文封装 IPv6 报文，即 IPv6 over IPv4
+- ISATAP：站内自动隧道寻址协议，（Intra-Site Automatic TUnnel Addressing Protocol）,与 sit 类似，用于 IPv6 的隧道封装
+- VTI：虚拟隧道接口（virtual tunnel interface）,思科提粗的一种 IPSec 隧道的技术。
+
+Linux L3 隧道底层实现原理都是基于 tun 设备，ipip 本质上也是 tun 设备的高级应用
+
